@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../providers/my_tabs_display_provider.dart';
-import '../providers/auth_provider.dart';
-import '../utils/server_utils.dart';
 import '../widgets/settings_section.dart';
 
 class MyTabsDisplaySettingsScreen extends ConsumerWidget {
@@ -21,8 +19,6 @@ class MyTabsDisplaySettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(myTabsDisplayProvider);
     final notifier = ref.read(myTabsDisplayProvider.notifier);
-    final authState = ref.watch(authProvider);
-    final isOfficialServer = ServerUtils.isOfficialServer(authState.host);
 
     return SettingsSubpageScaffold(
       title: S.of(context).myTabsDisplaySettings,
@@ -47,14 +43,13 @@ class MyTabsDisplaySettingsScreen extends ConsumerWidget {
                 subtitle: S.of(context).cannotBeDisabled,
                 trailing: const Switch(value: true, onChanged: null),
               ),
-              if (isOfficialServer)
-                SettingsSwitchTile(
-                  icon: Icons.playlist_play,
-                  title: S.of(context).playlists,
-                  subtitle: S.of(context).showPlaylists,
-                  value: settings.showPlaylists,
-                  onChanged: (value) => notifier.setShowPlaylists(value),
-                ),
+              SettingsSwitchTile(
+                icon: Icons.playlist_play,
+                title: S.of(context).playlists,
+                subtitle: S.of(context).showPlaylists,
+                value: settings.showPlaylists,
+                onChanged: (value) => notifier.setShowPlaylists(value),
+              ),
               SettingsSwitchTile(
                 icon: Icons.subtitles,
                 title: S.of(context).subtitleLibrary,

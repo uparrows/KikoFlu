@@ -6,7 +6,6 @@ import '../providers/my_tabs_display_provider.dart';
 import '../providers/works_provider.dart' show LayoutType;
 import '../utils/scroll_optimization.dart';
 import '../providers/auth_provider.dart';
-import '../utils/server_utils.dart';
 import '../utils/l10n_extensions.dart';
 import '../widgets/works_grid_view.dart';
 import '../widgets/virtualized_sliver_collection.dart';
@@ -51,8 +50,6 @@ class _MyScreenState extends ConsumerState<MyScreen>
     required double collapsedToolbarTop,
   }) {
     final tabs = <_TabInfo>[];
-    final authState = ref.watch(authProvider);
-    final isOfficialServer = ServerUtils.isOfficialServer(authState.host);
 
     if (settings.showOnlineMarks) {
       tabs.add(_TabInfo(
@@ -76,7 +73,8 @@ class _MyScreenState extends ConsumerState<MyScreen>
       widget: HistoryScreen(topInset: contentTop),
     ));
 
-    if (settings.showPlaylists && isOfficialServer) {
+    // 播放列表（自建服务器也显示）
+    if (settings.showPlaylists) {
       tabs.add(_TabInfo(
         title: S.of(context).playlists,
         icon: Icons.playlist_play,

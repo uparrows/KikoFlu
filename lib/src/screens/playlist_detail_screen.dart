@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/playlist_detail_provider.dart';
+import '../providers/audio_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/playlist_display_provider.dart';
 import '../providers/work_card_display_provider.dart';
 import '../models/playlist.dart';
 import '../models/work.dart';
+import '../models/audio_tap_playlist_mode.dart';
 import '../services/storage_service.dart';
 import '../widgets/playlist_add_works_dialog.dart';
 import '../widgets/playlist_edit_dialog.dart';
@@ -291,7 +293,65 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
           context, S.of(context).saveFailedWithError(e.toString()));
     }
   }
+  /// 播放整个播放列表（跨作品连续播放）
+  Future<void> _playWholePlaylist() async {
+    final auth = ref.read(authProvider);
+    final host = auth.host ?? '';
+    final token = auth.token ?? '';
+    if (host.isEmpty) {
+      SnackBarUtil.showError(
+        context,
+        S.of(context).playbackFailed('未登录或服务器地址为空'),
+      );
+      return;
+    }
 
+    if (!mounted) return;
+    SnackBarUtil.showLoading(context, S.of(context).loading);
+
+    try {
+      final api = ref.read(kikoeruApiServiceProvider);
+      final tracks = await api.getPlaylistTracksForPlayback(
+        playlistId: widget.playlistId,
+        host: host,
+        token: token,
+      );
+
+      if (!mounted) return;
+      SnackBarUtil.hide(context);
+
+      if (tracks.isEmpty) {
+        SnackBarUtil.showError(
+          context,
+          S.of(context).noPlayableAudioFiles,
+        );
+        return;
+      }
+
+      await ref.read(audioPlayerControllerProvider.notifier).playTracks(
+            tracks,
+            startIndex: 0,
+            playlistMode: AudioTapPlaylistMode.replaceQueue,
+          );
+
+      if (!mounted) return;
+      SnackBarUtil.showSuccess(
+        context,
+        S.of(context).nowPlayingNOfTotal(
+              tracks.first.title,
+              1,
+              tracks.length,
+            ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      SnackBarUtil.hide(context);
+      SnackBarUtil.showError(
+        context,
+        S.of(context).playbackFailed(e.toString()),
+      );
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(playlistDetailProvider(widget.playlistId));
@@ -299,6 +359,11 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     return Scaffold(
       appBar: ScrollableAppBar(
         actions: [
+          IconButton(
+            icon: const Icon(Icons.play_arrow),
+            onPressed: _playWholePlaylist,
+            tooltip: S.of(context).playAll,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
