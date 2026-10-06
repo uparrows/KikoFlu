@@ -5,9 +5,8 @@
   
   在原有基础上特化对ValoHalo/Kikoeru项目的适配，适配支持自建kikoeru服务器播放列表，增加播放按钮能够顺序播放自建的整个播放列表，详情页长按可直接加入队列或下一曲播放、或加入播放列表或下载等，播放列表内每个条目增加播放按钮，点击播放按钮会自动加入队列并从当前音乐播放，由于针对指定服务端修改，并且魔改较多，故不合并到原仓库。
 
-<img width="992" height="1059" alt="8" src="https://github.com/user-attachments/assets/f4a53d88-8f29-4395-9436-6544b86e998b" />
+<img width="1974" height="1052" alt="3" src="https://github.com/user-attachments/assets/cc1af55a-cc54-49f2-9de3-89ea007c195f" />
 
-<img width="992" height="1059" alt="b" src="https://github.com/user-attachments/assets/2c2bcefc-3ce3-4c7a-a3bb-f83f0e47da9d" />
 
 
 下面是原仓库相关介绍：
