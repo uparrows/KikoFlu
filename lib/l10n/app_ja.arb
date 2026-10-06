@@ -196,6 +196,12 @@
   "downloaded": "ダウンロード済み",
   "downloadTasks": "ダウンロードタスク",
   "subtitleLibrary": "字幕ライブラリ",
+  "addToQueue": "現在のキューに追加",
+  "playNext": "次に再生",
+  "playNextSet": "次の再生に設定しました",
+  "addToSavedPlaylist": "保存済みプレイリストに追加",
+  "copyName": "ファイル名をコピー",
+  "addedToQueue": "現在のキューに追加しました",
 
   "all": "すべて",
   "marked": "気になる",

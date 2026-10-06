@@ -247,6 +247,12 @@
   "downloaded": "Downloaded",
   "downloadTasks": "Download Tasks",
   "subtitleLibrary": "Subtitle Library",
+  "addToQueue": "Add to current queue",
+  "playNext": "Play next",
+  "playNextSet": "Set as next",
+  "addToSavedPlaylist": "Add to saved playlist",
+  "copyName": "Copy file name",
+  "addedToQueue": "Added to current queue",
 
   "all": "All",
   "marked": "Marked",

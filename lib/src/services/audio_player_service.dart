@@ -1008,7 +1008,65 @@ class AudioPlayerService {
 
     return indexMap;
   }
+  /// 把 tracks 插到当前曲目后面（下一首位置）。
+  ///
+  /// - 队列为空：等同于 [updateQueue]
+  /// - 已在队列中的音轨会被**移动**到当前位置之后（不是忽略）
+  /// - 若音轨就是当前曲目本身，则跳过（不能把自己移到"下一首"）
+  /// - 不打断当前播放
+  Future<Map<String, int>> playNext(List<AudioTrack> tracks) async {
+    final indexMap = <String, int>{};
+    if (tracks.isEmpty) return indexMap;
 
+    if (_queue.isEmpty) {
+      await updateQueue(tracks);
+      for (var i = 0; i < _queue.length; i++) {
+        indexMap[_queue[i].id] = i;
+      }
+      return indexMap;
+    }
+
+    // 记录当前曲目的 id，移动后要重新定位它
+    final currentTrackId = _queue[_currentIndex].id;
+
+    // 将要插入的音轨（去重，保留顺序）
+    final toInsert = <AudioTrack>[];
+    final seenIds = <String>{};
+    for (final track in tracks) {
+      if (track.id == currentTrackId) continue; // 不能把自己设为下一曲
+      if (seenIds.add(track.id)) {
+        toInsert.add(track);
+      }
+    }
+
+    if (toInsert.isEmpty) return indexMap;
+
+    // 从队列里移除已存在的相同 id（不管在哪个位置）
+    final insertIds = {for (final t in toInsert) t.id};
+    _queue.removeWhere((t) => insertIds.contains(t.id) && t.id != currentTrackId);
+
+    // 重新定位当前曲目（removeWhere 可能改变了它的下标）
+    final newCurrentIndex =
+        _queue.indexWhere((t) => t.id == currentTrackId);
+    if (newCurrentIndex != -1) {
+      _currentIndex = newCurrentIndex;
+    }
+
+    // 插到当前曲目后面
+    final insertAt = (_currentIndex + 1).clamp(0, _queue.length);
+    _queue.insertAll(insertAt, toInsert);
+
+    for (var i = 0; i < toInsert.length; i++) {
+      indexMap[toInsert[i].id] = insertAt + i;
+    }
+
+    _queueController.add(List.from(_queue));
+    await persistPlaybackSession();
+    _log.captureOutput(
+      '[Audio] playNext 移动/插入 ${toInsert.length} 条音轨到 index=$insertAt',
+    );
+    return indexMap;
+  }
   void _checkpointPlaybackSession(Duration position) {
     if (_queue.isEmpty ||
         _isRestoringSession ||

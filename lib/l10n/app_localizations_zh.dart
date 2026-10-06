@@ -552,6 +552,24 @@ class SZh extends S {
   String get subtitleLibrary => '字幕库';
 
   @override
+  String get addToQueue => '加入当前队列';
+
+  @override
+  String get playNext => '下一曲播放';
+
+  @override
+  String get playNextSet => '已设为下一曲';
+
+  @override
+  String get addToSavedPlaylist => '加入已保存列表';
+
+  @override
+  String get copyName => '复制文件名';
+
+  @override
+  String get addedToQueue => '已加入当前队列';
+
+  @override
   String get all => '全部';
 
   @override
@@ -4189,6 +4207,24 @@ class SZhHant extends SZh {
 
   @override
   String get subtitleLibrary => '字幕庫';
+
+  @override
+  String get addToQueue => '加入目前佇列';
+
+  @override
+  String get playNext => '下一首播放';
+
+  @override
+  String get playNextSet => '已設為下一首';
+
+  @override
+  String get addToSavedPlaylist => '加入已儲存清單';
+
+  @override
+  String get copyName => '複製檔案名稱';
+
+  @override
+  String get addedToQueue => '已加入目前佇列';
 
   @override
   String get all => '全部';

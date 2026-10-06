@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'file_explorer_header.dart';
 import 'file_explorer_status_view.dart';
 import 'file_tree_view.dart';
+import 'track_context_menu.dart';
 
 class FileExplorerTreePanel extends StatelessWidget {
   const FileExplorerTreePanel({
@@ -15,6 +16,7 @@ class FileExplorerTreePanel extends StatelessWidget {
     required this.expandedFolders,
     required this.onToggleFolder,
     required this.onFileTap,
+    this.onFileLongPress,
     this.errorMessage,
     this.onRetry,
     this.trailing,
@@ -40,6 +42,7 @@ class FileExplorerTreePanel extends StatelessWidget {
   final Set<String> expandedFolders;
   final ValueChanged<String> onToggleFolder;
   final FileTreeItemTap onFileTap;
+  final FileTreeItemLongPress? onFileLongPress;
   final FileTreeDisplayNameBuilder? displayNameFor;
   final FileTreeMetadataBuilder? metadataBuilder;
   final FileTreeTrailingBuilder? trailingBuilder;
@@ -71,6 +74,7 @@ class FileExplorerTreePanel extends StatelessWidget {
               expandedFolders: expandedFolders,
               onToggleFolder: onToggleFolder,
               onFileTap: onFileTap,
+			  onFileLongPress: onFileLongPress,
               displayNameFor: displayNameFor,
               metadataBuilder: metadataBuilder,
               trailingBuilder: trailingBuilder,

@@ -9,6 +9,7 @@ import '../services/log_service.dart';
 import '../utils/snackbar_util.dart';
 import '../../l10n/app_localizations.dart';
 import 'responsive_dialog.dart';
+import 'add_to_playlist_dialog.dart';
 
 /// 添加作品到播放列表的对话框
 class AddToPlaylistDialog extends ConsumerStatefulWidget {

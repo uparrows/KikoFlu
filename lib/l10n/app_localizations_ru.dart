@@ -570,6 +570,24 @@ class SRu extends S {
   String get subtitleLibrary => 'Библиотека субтитров';
 
   @override
+  String get addToQueue => 'Добавить в текущую очередь';
+
+  @override
+  String get playNext => 'Воспроизвести следующим';
+
+  @override
+  String get playNextSet => 'Установлено следующим';
+
+  @override
+  String get addToSavedPlaylist => 'Добавить в сохранённый плейлист';
+
+  @override
+  String get copyName => 'Копировать имя файла';
+
+  @override
+  String get addedToQueue => 'Добавлено в текущую очередь';
+
+  @override
   String get all => 'Все';
 
   @override

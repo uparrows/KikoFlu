@@ -554,6 +554,24 @@ class SJa extends S {
   String get subtitleLibrary => '字幕ライブラリ';
 
   @override
+  String get addToQueue => '現在のキューに追加';
+
+  @override
+  String get playNext => '次に再生';
+
+  @override
+  String get playNextSet => '次の再生に設定しました';
+
+  @override
+  String get addToSavedPlaylist => '保存済みプレイリストに追加';
+
+  @override
+  String get copyName => 'ファイル名をコピー';
+
+  @override
+  String get addedToQueue => '現在のキューに追加しました';
+
+  @override
   String get all => 'すべて';
 
   @override

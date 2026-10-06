@@ -1146,6 +1146,42 @@ abstract class S {
   /// **'Subtitle Library'**
   String get subtitleLibrary;
 
+  /// No description provided for @addToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to current queue'**
+  String get addToQueue;
+
+  /// No description provided for @playNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Play next'**
+  String get playNext;
+
+  /// No description provided for @playNextSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as next'**
+  String get playNextSet;
+
+  /// No description provided for @addToSavedPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to saved playlist'**
+  String get addToSavedPlaylist;
+
+  /// No description provided for @copyName.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy file name'**
+  String get copyName;
+
+  /// No description provided for @addedToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to current queue'**
+  String get addedToQueue;
+
   /// No description provided for @all.
   ///
   /// In en, this message translates to:

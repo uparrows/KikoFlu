@@ -568,6 +568,24 @@ class SEn extends S {
   String get subtitleLibrary => 'Subtitle Library';
 
   @override
+  String get addToQueue => 'Add to current queue';
+
+  @override
+  String get playNext => 'Play next';
+
+  @override
+  String get playNextSet => 'Set as next';
+
+  @override
+  String get addToSavedPlaylist => 'Add to saved playlist';
+
+  @override
+  String get copyName => 'Copy file name';
+
+  @override
+  String get addedToQueue => 'Added to current queue';
+
+  @override
   String get all => 'All';
 
   @override

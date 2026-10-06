@@ -454,6 +454,12 @@
   "downloadComplete": "Загрузка завершена",
   "downloadFailed": "Ошибка загрузки",
   "startDownload": "Начать загрузку",
+  "addToQueue": "Добавить в текущую очередь",
+  "playNext": "Воспроизвести следующим",
+  "playNextSet": "Установлено следующим",
+  "addToSavedPlaylist": "Добавить в сохранённый плейлист",
+  "copyName": "Копировать имя файла",
+  "addedToQueue": "Добавлено в текущую очередь",
 
   "confirmDeleteDownload": "Удалить эту загрузку? Загруженные файлы тоже будут удалены.",
   "deletedSuccessfully": "Удалено",

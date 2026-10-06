@@ -5,12 +5,19 @@ import '../../l10n/app_localizations.dart';
 import '../utils/file_icon_utils.dart';
 import '../utils/file_tree_utils.dart';
 import '../utils/snackbar_util.dart';
+import 'track_context_menu.dart';
 
 typedef FileTreeDisplayNameBuilder = String Function(String originalTitle);
 typedef FileTreeItemTap = void Function(
   dynamic item,
   String displayTitle,
   String parentPath,
+);
+typedef FileTreeItemLongPress = void Function(
+  dynamic item,
+  String displayTitle,
+  String parentPath,
+  TrackContextAction action,
 );
 typedef FileTreeMetadataBuilder = Widget? Function(
   BuildContext context,
@@ -52,6 +59,7 @@ class FileTreeView extends StatelessWidget {
     required this.expandedFolders,
     required this.onToggleFolder,
     required this.onFileTap,
+    this.onFileLongPress,
     this.displayNameFor,
     this.metadataBuilder,
     this.trailingBuilder,
@@ -65,6 +73,7 @@ class FileTreeView extends StatelessWidget {
   final Set<String> expandedFolders;
   final ValueChanged<String> onToggleFolder;
   final FileTreeItemTap onFileTap;
+  final FileTreeItemLongPress? onFileLongPress;
   final FileTreeDisplayNameBuilder? displayNameFor;
   final FileTreeMetadataBuilder? metadataBuilder;
   final FileTreeTrailingBuilder? trailingBuilder;
@@ -114,9 +123,10 @@ class FileTreeView extends StatelessWidget {
         showDownloadedBadge: showDownloadedBadge,
         fadeDownloadedItems: fadeDownloadedItems,
         hasLibrarySubtitle:
-            audioWithLibrarySubtitles.contains(entry.originalTitle),
+        audioWithLibrarySubtitles.contains(entry.originalTitle),
         onToggleFolder: onToggleFolder,
         onFileTap: onFileTap,
+        onFileLongPress: onFileLongPress,
       ));
 
       final children = entry.children;
@@ -155,6 +165,7 @@ class _FileTreeRow extends StatelessWidget {
     required this.hasLibrarySubtitle,
     required this.onToggleFolder,
     required this.onFileTap,
+    this.onFileLongPress,
   });
 
   final FileTreeEntry entry;
@@ -166,6 +177,7 @@ class _FileTreeRow extends StatelessWidget {
   final bool hasLibrarySubtitle;
   final ValueChanged<String> onToggleFolder;
   final FileTreeItemTap onFileTap;
+  final FileTreeItemLongPress? onFileLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -177,11 +189,39 @@ class _FileTreeRow extends StatelessWidget {
           onFileTap(entry.item, entry.displayTitle, entry.parentPath);
         }
       },
-      onLongPress: () {
-        Clipboard.setData(ClipboardData(text: entry.displayTitle));
-        SnackBarUtil.showSuccess(
-          context,
-          S.of(context).copiedName(entry.displayTitle),
+      onLongPress: () async {
+        // 文件夹、非音频文件沿用原来的"复制文件名"逻辑
+        if (entry.isFolder ||
+            !FileIconUtils.isAudioFile(entry.item) ||
+            onFileLongPress == null) {
+          Clipboard.setData(ClipboardData(text: entry.displayTitle));
+          SnackBarUtil.showSuccess(
+            context,
+            S.of(context).copiedName(entry.displayTitle),
+          );
+          return;
+        }
+
+        final action = await TrackContextMenu.show(context);
+        if (action == null) return;
+
+        // 复制文件名在菜单层就地处理，不上升到上层
+        if (action == TrackContextAction.copyName) {
+          Clipboard.setData(ClipboardData(text: entry.displayTitle));
+          if (context.mounted) {
+            SnackBarUtil.showSuccess(
+              context,
+              S.of(context).copiedName(entry.displayTitle),
+            );
+          }
+          return;
+        }
+
+        onFileLongPress!(
+          entry.item,
+          entry.displayTitle,
+          entry.parentPath,
+          action,
         );
       },
       child: Padding(

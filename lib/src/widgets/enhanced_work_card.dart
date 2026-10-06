@@ -24,12 +24,14 @@ class EnhancedWorkCard extends ConsumerStatefulWidget {
   final Widget? trailingAction;
   final int crossAxisCount;
   final bool? isListLayout;
+  final Widget? coverOverlay;
 
   const EnhancedWorkCard({
     super.key,
     required this.work,
     this.onTap,
     this.trailingAction,
+    this.coverOverlay,
     this.crossAxisCount = 2,
     this.isListLayout,
   });
@@ -239,6 +241,10 @@ class _EnhancedWorkCardState extends ConsumerState<EnhancedWorkCard> {
                         isLocal: hasLocalSubtitle,
                       ),
                     ),
+                    if (widget.coverOverlay != null)          // ← 加
+                    Positioned.fill(                          // ← 加
+                    child: widget.coverOverlay!,            // ← 加
+                    ),
                 ],
               ),
             ),
@@ -398,6 +404,10 @@ class _EnhancedWorkCardState extends ConsumerState<EnhancedWorkCard> {
                       bottom: 6,
                       right: 6,
                       child: _buildDateTag(),
+                    ),
+                    if (widget.coverOverlay != null)          // ← 加
+                    Positioned.fill(                          // ← 加
+                    child: widget.coverOverlay!,            // ← 加
                     ),
                 ],
               ),
@@ -570,7 +580,14 @@ class _EnhancedWorkCardState extends ConsumerState<EnhancedWorkCard> {
                           aspectRatio: isLandscape ? 1.55 : 1.4,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: _buildCoverImage(context, host, token),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                _buildCoverImage(context, host, token),
+                                if (widget.coverOverlay != null)
+                                  widget.coverOverlay!,
+                              ],
+                            ),
                           ),
                         ),
                       ),

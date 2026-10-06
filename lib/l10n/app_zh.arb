@@ -196,6 +196,12 @@
   "downloaded": "已下载",
   "downloadTasks": "下载任务",
   "subtitleLibrary": "字幕库",
+  "addToQueue": "加入当前队列",
+  "playNext": "下一曲播放",
+  "playNextSet": "已设为下一曲",
+  "addToSavedPlaylist": "加入已保存列表",
+  "copyName": "复制文件名",
+  "addedToQueue": "已加入当前队列",
 
   "all": "全部",
   "marked": "想听",

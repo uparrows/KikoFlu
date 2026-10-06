@@ -377,7 +377,14 @@ class AudioPlayerController extends StateNotifier<AudioPlayerState> {
   Future<void> moveTrack(int oldIndex, int newIndex) async {
     await _service.moveTrack(oldIndex, newIndex);
   }
-
+  /// 把 tracks 插到当前曲目后面（下一首播放）
+  Future<void> playNext(List<AudioTrack> tracks) async {
+    await _service.playNext(tracks);
+  }
+  /// 把 tracks 追加到当前队列末尾
+  Future<void> appendTracks(List<AudioTrack> tracks) async {
+    await _service.appendTracks(tracks);
+  }
   Future<void> setRepeatMode(LoopMode mode) async {
     await _service.setRepeatMode(mode);
     state = state.copyWith(repeatMode: mode);

@@ -22,12 +22,16 @@ import '../services/video_file_opener.dart';
 import '../services/file_name_translation_service.dart';
 import '../services/file_name_translation_controller.dart';
 import '../services/file_explorer_tap_resolver.dart';
+import '../services/work_track_file_builder.dart';
 import '../utils/file_icon_utils.dart';
 import '../utils/file_tree_utils.dart';
 import '../utils/snackbar_util.dart';
 import '../utils/string_utils.dart';
 import 'file_tree_actions.dart';
 import 'file_tree_view.dart';
+import 'track_context_menu.dart';
+import '../models/audio_track.dart';
+import 'playlist_add_works_dialog.dart';
 import 'file_explorer_tree_panel.dart';
 import 'image_gallery_screen.dart';
 import 'manual_subtitle_load_flow.dart';
@@ -35,6 +39,9 @@ import 'text_preview_screen.dart';
 import 'pdf_preview_screen.dart';
 import 'video_open_failure_dialog.dart';
 import 'translation_toggle_button.dart';
+import 'file_selection_dialog.dart';
+import 'responsive_dialog.dart';
+import 'add_to_playlist_dialog.dart';
 
 final _log = LogService.instance;
 
@@ -649,6 +656,7 @@ class _FileExplorerWidgetState extends ConsumerState<FileExplorerWidget> {
       expandedFolders: _expandedFolders,
       onToggleFolder: _toggleFolder,
       onFileTap: _handleFileTap,
+      onFileLongPress: _showTrackContextMenu,
       displayNameFor: _getDisplayName,
       metadataBuilder: _buildFileMetadata,
       trailingBuilder: _buildFileActions,
@@ -793,6 +801,107 @@ class _FileExplorerWidgetState extends ConsumerState<FileExplorerWidget> {
           S.of(context).unsupportedFileTypeWithTitle(title),
           duration: const Duration(seconds: 2),
         );
+    }
+  }
+    /// 长按音频文件的上下文菜单
+  Future<void> _showTrackContextMenu(
+    dynamic file,
+    String displayTitle,
+    String parentPath,
+    TrackContextAction action,
+  ) async {
+    if (!mounted) return;
+
+    final l10n = S.of(context);
+    final authState = ref.read(authProvider);
+    final host = authState.host ?? '';
+    final token = authState.token ?? '';
+    final coverUrl =
+        host.isEmpty ? null : widget.work.getCoverImageUrl(host, token: token);
+
+    // 构造单条 AudioTrack
+    final url = await _audioUrlResolver.resolveOnline(
+      file: file,
+      workId: widget.work.id,
+      host: host,
+      token: token,
+      downloadedFiles: _downloadedFiles,
+      fileRelativePaths: _fileRelativePaths,
+    );
+
+    if (!mounted) return;
+
+    if (url == null || url.isEmpty) {
+      SnackBarUtil.showError(
+        context,
+        l10n.cannotFindAudioFile(displayTitle),
+      );
+      return;
+    }
+
+    final hash = FileTreeUtils.property(file, 'hash')?.toString();
+    final track = AudioTrack(
+      id: hash ?? displayTitle,
+      url: url,
+      title: displayTitle,
+      album: widget.work.title,
+      artworkUrl: coverUrl,
+      workId: widget.work.id,
+      hash: hash,
+    );
+
+    switch (action) {
+      case TrackContextAction.addToQueue:
+        await ref
+            .read(audioPlayerControllerProvider.notifier)
+            .appendTracks([track]);
+        if (mounted) {
+          SnackBarUtil.showSuccess(context, l10n.addedToQueue);
+        }
+        return;
+
+      case TrackContextAction.playNext:
+        await ref
+            .read(audioPlayerControllerProvider.notifier)
+            .playNext([track]);
+        if (mounted) {
+          SnackBarUtil.showSuccess(context, l10n.playNextSet);
+        }
+        return;
+
+      case TrackContextAction.addToSavedPlaylist:
+        await AddToPlaylistDialog.show(
+          context: context,
+          workId: widget.work.id,
+          workTitle: widget.work.title,
+        );
+        return;
+
+      case TrackContextAction.download:
+        final api = ref.read(kikoeruApiServiceProvider);
+        final files = await api.getWorkTracks(widget.work.id);
+        final authState = ref.read(authProvider);
+        final trackBuilder = WorkTrackFileBuilder(
+          host: authState.host ?? '',
+          token: authState.token ?? '',
+        );
+        final workWithTracks = trackBuilder.withTracks(
+          work: widget.work,
+          files: files,
+        );
+        if (!mounted) return;
+        await showResponsiveBottomSheet<void>(
+          context: context,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+          builder: (dialogContext) => FileSelectionDialog(
+            work: workWithTracks,
+          ),
+        );
+        return;
+
+      case TrackContextAction.copyName:
+        // 已在 file_tree_view 处理，不会到这里
+        return;
     }
   }
 }

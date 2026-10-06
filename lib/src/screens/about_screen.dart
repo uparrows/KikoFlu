@@ -19,7 +19,7 @@ class AboutScreen extends ConsumerStatefulWidget {
 
 class _AboutScreenState extends ConsumerState<AboutScreen> {
   static final Uri _repoUri =
-      Uri.parse('https://github.com/Meteor-Sage/Kikoeru-Flutter');
+      Uri.parse('https://github.com/uparrows/KikoFlu');
   late final Future<_AboutData> _aboutFuture;
 
   @override
@@ -173,7 +173,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                   icon: Icons.person_outline,
                   iconColor: primaryColor,
                   title: S.of(context).author,
-                  subtitle: 'Meteor-Sage',
+                  subtitle: 'Meteor-Sage、uparrows',
                 ),
               ),
               const SizedBox(height: 16),

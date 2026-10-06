@@ -352,6 +352,66 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
       );
     }
   }
+   /// 播放整个列表，从指定作品开始
+  Future<void> _playWholePlaylistFrom(Work startWork) async {
+    final auth = ref.read(authProvider);
+    final host = auth.host ?? '';
+    final token = auth.token ?? '';
+    if (host.isEmpty) {
+      SnackBarUtil.showError(
+        context,
+        S.of(context).playbackFailed('未登录或服务器地址为空'),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    SnackBarUtil.showLoading(context, S.of(context).loading);
+
+    try {
+      final api = ref.read(kikoeruApiServiceProvider);
+      final tracks = await api.getPlaylistTracksForPlayback(
+        playlistId: widget.playlistId,
+        host: host,
+        token: token,
+      );
+
+      if (!mounted) return;
+      SnackBarUtil.hide(context);
+
+      if (tracks.isEmpty) {
+        SnackBarUtil.showError(context, S.of(context).noPlayableAudioFiles);
+        return;
+      }
+
+      // 找到该作品的第一条音轨在 tracks 里的下标
+      final startIndex = tracks.indexWhere((t) => t.workId == startWork.id);
+      final effectiveStartIndex = startIndex == -1 ? 0 : startIndex;
+
+      await ref.read(audioPlayerControllerProvider.notifier).playTracks(
+            tracks,
+            startIndex: effectiveStartIndex,
+            playlistMode: AudioTapPlaylistMode.replaceQueue,
+          );
+
+      if (!mounted) return;
+      SnackBarUtil.showSuccess(
+        context,
+        S.of(context).nowPlayingNOfTotal(
+              tracks[effectiveStartIndex].title,
+              effectiveStartIndex + 1,
+              tracks.length,
+            ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      SnackBarUtil.hide(context);
+      SnackBarUtil.showError(
+        context,
+        S.of(context).playbackFailed(e.toString()),
+      );
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(playlistDetailProvider(widget.playlistId));
@@ -567,19 +627,43 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
     );
   }
 
-  Widget _buildPlaylistWorkCardMasonry(
-    Work work,
-    bool isOwner, {
-    required int crossAxisCount,
-  }) {
-    return EnhancedWorkCard(
-      key: ValueKey(work.id),
-      work: work,
-      crossAxisCount: crossAxisCount,
-      isListLayout: false,
-      trailingAction: isOwner ? _buildPlaylistRemoveAction(work) : null,
-    );
-  }
+    Widget _buildPlaylistWorkCardMasonry(
+      Work work,
+      bool isOwner, {
+      required int crossAxisCount,
+    }) {
+      return EnhancedWorkCard(
+        key: ValueKey(work.id),
+        work: work,
+        crossAxisCount: crossAxisCount,
+        isListLayout: false,
+        trailingAction: isOwner ? _buildPlaylistRemoveAction(work) : null,
+        coverOverlay: _buildPlaylistPlayOverlay(work),
+      );
+    }
+
+    /// 封面中央的播放按钮（瀑布流布局用）
+    Widget _buildPlaylistPlayOverlay(Work work) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Center(
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.45),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => _playWholePlaylistFrom(work),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                Icons.play_arrow,
+                color: colorScheme.onPrimary,
+                size: 28,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
   Widget _buildPlaylistRemoveAction(Work work) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -765,10 +849,18 @@ class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
                 ],
               ),
             ),
-
-            // 移除按钮（仅作者可见）
+            // 播放按钮 + 移除按钮
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.play_circle_fill, size: 32),
+              color: colorScheme.primary,
+              tooltip: S.of(context).playAll,
+              onPressed: () => _playWholePlaylistFrom(work),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+            ),
             if (isOwner) ...[
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               _buildPlaylistRemoveAction(work),
             ],
           ],
