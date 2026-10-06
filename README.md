@@ -1,5 +1,6 @@
 <div align="center">
   <img src="assets/icons/app_icon_opaque.png" alt="KikoFlu" width="120" height="120">
+  
   # 修改内容
   
   在原有基础上特化对ValoHalo/Kikoeru项目的适配，适配自建kikoeru服务器播放列表，增加播放按钮能够顺序播放自建的整个播放列表
