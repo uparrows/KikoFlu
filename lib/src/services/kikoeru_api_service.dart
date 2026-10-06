@@ -7,6 +7,7 @@ import '../utils/server_utils.dart';
 import '../services/storage_service.dart';
 import 'cache_service.dart';
 import 'log_service.dart';
+import '../models/audio_track.dart';
 
 final _log = LogService.instance;
 
@@ -1610,46 +1611,235 @@ class KikoeruApiService {
     }
   }
 
+  // ===========================================================================
   // Playlists API
-  Future<List<dynamic>> getPlaylists() async {
-    try {
-      final response = await _dio.get('/api/playlists');
-      return response.data;
-    } catch (e) {
-      throw KikoeruApiException('Failed to get playlists', e);
-    }
-  }
+  //
+  // 两套后端：
+  //   - 官方服务器（asmr.one）：/api/playlist/* （action 风格，作品级）
+  //   - 自建服务器（本项目 Web 端）：/api/playlists （RESTful，音轨级）
+  //
+  // 客户端模型（Playlist / Work）是按官方风格设计的。自建分支在 service
+  // 层把 Web 端响应"翻译"成客户端期望的结构，上层 provider 和 UI 不用改。
+  //
+  // 差异：
+  //   - 服务端一条 item = 一个音轨（有 itemId，主键）
+  //   - 客户端一条 = 一个作品（按 workId 去重）
+  //   所以 add/remove 需要在 service 层做"作品 ↔ 音轨"转换。
+  // ===========================================================================
 
-  /// 获取用户的播放列表（需要token）
-  /// page: 页码（从1开始）
-  /// pageSize: 每页数量
-  /// filterBy: 筛选条件（固定为'all'）
+  /// 获取用户的播放列表（需要 token）
+  ///
+  /// - 官方：GET /api/playlist/get-playlists?page&pageSize&filterBy
+  /// - 自建：GET /api/playlists（无分页，一次返回全部）
   Future<Map<String, dynamic>> getUserPlaylists({
     int page = 1,
     int pageSize = 20,
     String filterBy = 'all',
   }) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.get(
+          '/api/playlist/get-playlists',
+          queryParameters: {
+            'page': page,
+            'pageSize': pageSize,
+            'filterBy': filterBy,
+          },
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to get user playlists', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
     try {
-      final response = await _dio.get(
-        '/api/playlist/get-playlists',
-        queryParameters: {
-          'page': page,
-          'pageSize': pageSize,
-          'filterBy': filterBy,
+      final response = await _dio.get('/api/playlists');
+      final data = response.data;
+      final rawList = (data is Map && data['playlists'] is List)
+          ? data['playlists'] as List
+          : const [];
+      final mapped = rawList
+          .whereType<Map>()
+          .map((item) => _mapCustomPlaylist(item.cast<String, dynamic>()))
+          .toList();
+
+      // 服务端不支持分页，伪造"单页包含全部"的分页信息，
+      // 让 provider 的 hasMore 计算为 false。
+      return {
+        'playlists': mapped,
+        'pagination': {
+          'page': 1,
+          'pageSize': mapped.isEmpty ? pageSize : mapped.length,
+          'totalCount': mapped.length,
         },
-      );
-      return response.data;
+      };
     } catch (e) {
       throw KikoeruApiException('Failed to get user playlists', e);
     }
   }
 
-  /// 创建播放列表（需要token）
-  /// name: 播放列表名称（必填）
-  /// privacy: 隐私设置 0=私享(只有您可以观看), 1=不公开(知道链接的人才能观看), 2=公开(任何人都可以观看)
-  /// locale: 语言区域，默认'zh-CN'
-  /// description: 描述（可选）
-  /// works: 作品ID列表，默认为空列表
+  /// Web 端 playlist JSON → 客户端 Playlist.fromJson 期望的结构
+  ///
+  /// 客户端 Playlist 模型有 userName / privacy / description 等字段，
+  /// Web 端没有这些概念，统一填默认值。
+  Map<String, dynamic> _mapCustomPlaylist(Map<String, dynamic> raw) {
+    return <String, dynamic>{
+      'id': raw['id']?.toString() ?? '',
+      'user_name': '',
+      'privacy': 0, // Web 端无隐私概念，默认私有
+      'locale': '',
+      'playback_count': 0,
+      'name': raw['name'] as String? ?? '',
+      'description': '',
+      'created_at': raw['created_at'] as String? ?? '',
+      'updated_at': raw['updated_at'] as String? ?? '',
+      'works_count': (raw['item_count'] as num?)?.toInt() ?? 0,
+      'latestWorkID': null,
+      'mainCoverUrl': '',
+    };
+  }
+
+  /// 获取播放列表元数据
+  ///
+  /// - 官方：GET /api/playlist/get-playlist-metadata?id=xxx
+  /// - 自建：GET /api/playlists/{id} 里的 playlist 字段
+  Future<Map<String, dynamic>> getPlaylistMetadata(String playlistId) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.get(
+          '/api/playlist/get-playlist-metadata',
+          queryParameters: {'id': playlistId},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to get playlist metadata', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
+    try {
+      final response = await _dio.get('/api/playlists/$playlistId');
+      final data = response.data;
+      final playlistRaw = (data is Map && data['playlist'] is Map)
+          ? (data['playlist'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{};
+      final items = (data is Map && data['items'] is List)
+          ? data['items'] as List
+          : const [];
+
+      // 详情接口可能不返回 item_count，用 items 长度兜底
+      playlistRaw['item_count'] ??= items.length;
+
+      return _mapCustomPlaylist(playlistRaw);
+    } catch (e) {
+      throw KikoeruApiException('Failed to get playlist metadata', e);
+    }
+  }
+
+  /// 获取播放列表中的作品
+  ///
+  /// - 官方：GET /api/playlist/get-playlist-works?id&page&pageSize
+  /// - 自建：GET /api/playlists/{id} → items 按 workId 去重成作品，
+  ///   再并发拉每个作品的完整详情补全卡片信息（有本地缓存时命中缓存）。
+  Future<Map<String, dynamic>> getPlaylistWorks({
+    required String playlistId,
+    int page = 1,
+    int pageSize = 12,
+  }) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.get(
+          '/api/playlist/get-playlist-works',
+          queryParameters: {
+            'id': playlistId,
+            'page': page,
+            'pageSize': pageSize,
+          },
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to get playlist works', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
+    try {
+      // 1. 拉播放列表详情，拿到 items
+      final response = await _dio.get('/api/playlists/$playlistId');
+      final data = response.data;
+      final items = (data is Map && data['items'] is List)
+          ? (data['items'] as List).whereType<Map>().toList()
+          : <Map>[];
+
+      // 2. 按 workId 去重，保留顺序
+      final Map<int, String> workIdToTitle = {};
+      for (final item in items) {
+        final m = item.cast<String, dynamic>();
+        final workId = (m['workId'] as num?)?.toInt() ??
+            int.tryParse((m['hash'] as String? ?? '').split('/').first) ??
+            0;
+        if (workId == 0) continue;
+        workIdToTitle.putIfAbsent(
+          workId,
+          () =>
+              m['workTitle'] as String? ??
+              m['title'] as String? ??
+              'RJ$workId',
+        );
+      }
+
+      if (workIdToTitle.isEmpty) {
+        return {
+          'works': <dynamic>[],
+          'pagination': {
+            'currentPage': 1,
+            'pageSize': pageSize,
+            'totalCount': 0,
+          },
+        };
+      }
+
+      // 3. 并发拉每个作品的完整详情。
+      //    getWork 内部有缓存（CacheService），重复进同一列表不会重复请求。
+      //    单个作品失败时降级为最小 map（只含 id/title），不影响其他作品。
+      final workIds = workIdToTitle.keys.toList();
+      final futures = workIds.map((workId) async {
+        try {
+          final detail = await getWork(workId);
+          detail['id'] ??= workId;
+          detail['title'] ??= workIdToTitle[workId] ?? 'RJ$workId';
+          return detail;
+        } catch (_) {
+          return <String, dynamic>{
+            'id': workId,
+            'title': workIdToTitle[workId] ?? 'RJ$workId',
+          };
+        }
+      });
+      final works = await Future.wait(futures);
+
+      // 4. 伪造单页 pagination（自建服务器一次返回全部）
+      return {
+        'works': works,
+        'pagination': {
+          'currentPage': 1,
+          'pageSize': works.isEmpty ? pageSize : works.length,
+          'totalCount': works.length,
+        },
+      };
+    } catch (e) {
+      throw KikoeruApiException('Failed to get playlist works', e);
+    }
+  }
+
+  /// 创建播放列表
+  ///
+  /// - 官方：POST /api/playlist/create-playlist {name,privacy,locale,works}
+  /// - 自建：POST /api/playlists {name, items:[]}
+  ///
+  /// Web 端不支持创建时带隐私/描述，创建后需要追加作品走
+  /// addWorksToPlaylist。
   Future<Map<String, dynamic>> createPlaylist({
     required String name,
     int privacy = 0,
@@ -1657,164 +1847,473 @@ class KikoeruApiService {
     String? description,
     List<int>? works,
   }) async {
-    try {
-      final data = {
-        'name': name,
-        'privacy': privacy,
-        'locale': locale,
-        'works': works ?? [],
-      };
-
-      if (description != null && description.isNotEmpty) {
-        data['description'] = description;
+    if (_isOfficialServer) {
+      try {
+        final data = <String, dynamic>{
+          'name': name,
+          'privacy': privacy,
+          'locale': locale,
+          'works': works ?? [],
+        };
+        if (description != null && description.isNotEmpty) {
+          data['description'] = description;
+        }
+        final response = await _dio.post(
+          '/api/playlist/create-playlist',
+          data: data,
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to create playlist', e);
       }
+    }
 
+    // ---- 自建服务器分支 ----
+    try {
       final response = await _dio.post(
-        '/api/playlist/create-playlist',
-        data: data,
+        '/api/playlists',
+        data: <String, dynamic>{
+          'name': name,
+          'items': <dynamic>[],
+        },
       );
-      return response.data;
+      final data = response.data;
+      final playlistRaw = (data is Map && data['playlist'] is Map)
+          ? (data['playlist'] as Map).cast<String, dynamic>()
+          : <String, dynamic>{
+              'id': 0,
+              'name': name,
+              'item_count': 0,
+            };
+      return _mapCustomPlaylist(playlistRaw);
     } catch (e) {
       throw KikoeruApiException('Failed to create playlist', e);
     }
   }
 
-  /// 添加(收藏)别人的播放列表
-  Future<Map<String, dynamic>> likePlaylist(String playlistId) async {
-    try {
-      final response = await _dio.post(
-        '/api/playlist/like-playlist',
-        data: {'id': playlistId},
-      );
-      return response.data;
-    } catch (e) {
-      throw KikoeruApiException('Failed to like playlist', e);
-    }
-  }
-
-  /// 取消收藏播放列表（删除不属于自己的播放列表）
-  Future<Map<String, dynamic>> removeLikePlaylist(String playlistId) async {
-    try {
-      final response = await _dio.post(
-        '/api/playlist/remove-like-playlist',
-        data: {'id': playlistId},
-      );
-      return response.data;
-    } catch (e) {
-      throw KikoeruApiException('Failed to remove liked playlist', e);
-    }
-  }
-
-  /// 删除自己创建的播放列表
-  Future<Map<String, dynamic>> deletePlaylist(String playlistId) async {
-    try {
-      final response = await _dio.post(
-        '/api/playlist/delete-playlist',
-        data: {'id': playlistId},
-      );
-      return response.data;
-    } catch (e) {
-      throw KikoeruApiException('Failed to delete playlist', e);
-    }
-  }
-
   /// 编辑播放列表元数据
+  ///
+  /// - 官方：POST /api/playlist/edit-playlist-metadata
+  /// - 自建：PATCH /api/playlists/{id} {name}
+  ///
+  /// Web 端只支持改名，privacy 和 description 会被忽略。
   Future<Map<String, dynamic>> editPlaylistMetadata({
     required String id,
     required String name,
     required int privacy,
     required String description,
   }) async {
-    try {
-      final response = await _dio.post(
-        '/api/playlist/edit-playlist-metadata',
-        data: {
-          'id': id,
-          'data': {
-            'name': name,
-            'privacy': privacy,
-            'description': description,
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/edit-playlist-metadata',
+          data: {
+            'id': id,
+            'data': {
+              'name': name,
+              'privacy': privacy,
+              'description': description,
+            },
           },
-        },
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to edit playlist metadata', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
+    try {
+      await _dio.patch(
+        '/api/playlists/$id',
+        data: {'name': name},
       );
-      return response.data;
+      // 拉一次最新元数据返回
+      return await getPlaylistMetadata(id);
     } catch (e) {
       throw KikoeruApiException('Failed to edit playlist metadata', e);
     }
   }
 
+  /// 删除自己创建的播放列表
+  ///
+  /// - 官方：POST /api/playlist/delete-playlist {id}
+  /// - 自建：DELETE /api/playlists/{id}
+  Future<Map<String, dynamic>> deletePlaylist(String playlistId) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/delete-playlist',
+          data: {'id': playlistId},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to delete playlist', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
+    try {
+      await _dio.delete('/api/playlists/$playlistId');
+      return <String, dynamic>{'success': true};
+    } catch (e) {
+      throw KikoeruApiException('Failed to delete playlist', e);
+    }
+  }
+
   /// 添加作品到播放列表
+  ///
+  /// - 官方：POST /api/playlist/add-works-to-playlist {id, works:['RJ...']}
+  /// - 自建：对每个 RJ 号拉 /api/tracks/{workId}，转成 item，
+  ///   再 POST /api/playlists/{id}/items 追加。
+  ///
+  /// 注意：服务端是"音轨级"的，客户端给的是"作品级"的 RJ 号，
+  /// 所以一个作品可能展开成多条音轨 item。
   Future<Map<String, dynamic>> addWorksToPlaylist({
     required String playlistId,
     required List<String> works,
   }) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/add-works-to-playlist',
+          data: {'id': playlistId, 'works': works},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to add works to playlist', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
     try {
-      final response = await _dio.post(
-        '/api/playlist/add-works-to-playlist',
-        data: {
-          'id': playlistId,
-          'works': works,
-        },
+      final newItems = <Map<String, dynamic>>[];
+      for (final rj in works) {
+        final workId = int.tryParse(rj.replaceAll(RegExp(r'[^0-9]'), ''));
+        if (workId == null || workId == 0) continue;
+
+        try {
+          final tracksResp = await _dio.get('/api/tracks/$workId');
+          final tracks = tracksResp.data;
+          if (tracks is List) {
+            for (final track in tracks) {
+              if (track is! Map) continue;
+              final relativePath = track['title'] as String? ?? '';
+              if (relativePath.isEmpty) continue;
+              newItems.add(<String, dynamic>{
+                'workId': workId,
+                'relativePath': relativePath,
+                'title': track['title'] as String? ?? '',
+                'workTitle': track['workTitle'] as String? ?? '',
+              });
+            }
+          }
+        } catch (_) {
+          // 单个作品失败不影响整体
+        }
+      }
+
+      if (newItems.isEmpty) {
+        return <String, dynamic>{'success': true, 'added': 0};
+      }
+
+      await _dio.post(
+        '/api/playlists/$playlistId/items',
+        data: {'items': newItems},
       );
-      return response.data;
+      return <String, dynamic>{
+        'success': true,
+        'added': newItems.length,
+      };
     } catch (e) {
       throw KikoeruApiException('Failed to add works to playlist', e);
     }
   }
 
   /// 从播放列表移除作品
+  ///
+  /// - 官方：POST /api/playlist/remove-works-from-playlist {id, works:[int]}
+  /// - 自建：先 GET 详情拿到该 workId 的所有 itemId，再逐个
+  ///   DELETE /api/playlists/{id}/items/{itemId}。
+  ///
+  /// 注意：服务端没有"按 workId 批量删"的接口，只有单条 item 删除。
   Future<Map<String, dynamic>> removeWorksFromPlaylist({
     required String playlistId,
     required List<int> works,
   }) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/remove-works-from-playlist',
+          data: {'id': playlistId, 'works': works},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to remove works from playlist', e);
+      }
+    }
+
+    // ---- 自建服务器分支 ----
     try {
-      final response = await _dio.post(
-        '/api/playlist/remove-works-from-playlist',
-        data: {
-          'id': playlistId,
-          'works': works,
-        },
-      );
-      return response.data;
+      final detailResp = await _dio.get('/api/playlists/$playlistId');
+      final data = detailResp.data;
+      final items = (data is Map && data['items'] is List)
+          ? (data['items'] as List).whereType<Map>().toList()
+          : <Map>[];
+
+      final removeSet = works.toSet();
+      final itemIdsToDelete = <int>[];
+      for (final item in items) {
+        final m = item.cast<String, dynamic>();
+        final workId = (m['workId'] as num?)?.toInt() ??
+            int.tryParse((m['hash'] as String? ?? '').split('/').first) ??
+            0;
+        if (!removeSet.contains(workId)) continue;
+        final itemId = (m['itemId'] as num?)?.toInt() ?? 0;
+        if (itemId != 0) itemIdsToDelete.add(itemId);
+      }
+
+      for (final itemId in itemIdsToDelete) {
+        await _dio.delete('/api/playlists/$playlistId/items/$itemId');
+      }
+
+      return <String, dynamic>{
+        'success': true,
+        'removed': itemIdsToDelete.length,
+      };
     } catch (e) {
       throw KikoeruApiException('Failed to remove works from playlist', e);
     }
   }
 
-  /// 获取播放列表元数据
-  Future<Map<String, dynamic>> getPlaylistMetadata(String playlistId) async {
-    try {
-      final response = await _dio.get(
-        '/api/playlist/get-playlist-metadata',
-        queryParameters: {'id': playlistId},
-      );
-      return response.data;
-    } catch (e) {
-      throw KikoeruApiException('Failed to get playlist metadata', e);
+  /// 收藏别人的播放列表
+  ///
+  /// - 官方：POST /api/playlist/like-playlist
+  /// - 自建：不支持（无"收藏他人列表"概念）
+  Future<Map<String, dynamic>> likePlaylist(String playlistId) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/like-playlist',
+          data: {'id': playlistId},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to like playlist', e);
+      }
     }
+    throw KikoeruApiException(
+      'Like playlist is not supported on custom server',
+      null,
+    );
   }
 
-  /// 获取播放列表中的作品
-  Future<Map<String, dynamic>> getPlaylistWorks({
+  /// 取消收藏播放列表（删除不属于自己的播放列表）
+  ///
+  /// - 官方：POST /api/playlist/remove-like-playlist
+  /// - 自建：不支持
+  Future<Map<String, dynamic>> removeLikePlaylist(String playlistId) async {
+    if (_isOfficialServer) {
+      try {
+        final response = await _dio.post(
+          '/api/playlist/remove-like-playlist',
+          data: {'id': playlistId},
+        );
+        return response.data;
+      } catch (e) {
+        throw KikoeruApiException('Failed to remove liked playlist', e);
+      }
+    }
+    throw KikoeruApiException(
+      'Remove liked playlist is not supported on custom server',
+      null,
+    );
+  }
+
+  /// 旧接口：获取播放列表（无 token 版本，保留兼容）
+  Future<List<dynamic>> getPlaylists() async {
+    try {
+      final response = await _dio.get('/api/playlists');
+      final data = response.data;
+      if (data is Map && data['playlists'] is List) {
+        return data['playlists'] as List;
+      }
+      if (data is List) return data;
+      return const [];
+    } catch (e) {
+      throw KikoeruApiException('Failed to get playlists', e);
+    }
+  }
+   /// 获取播放列表的音轨列表（用于"播放整个列表"）
+  ///
+  /// 自建服务器：先 GET /api/playlists/{id} 拿 items，再对每个作品调
+  /// /api/tracks/{workId} 拿到该作品的音轨，按 items 里的顺序拼成一个
+  /// 完整的 AudioTrack 列表。同一个作品只展开一次。
+  ///
+  /// 官方服务器：暂不支持（官方服务器的 item 本身就是音轨，但需要
+  /// /api/playlist/get-playlist-works 的完整数据，这里先只实现自建分支）。
+  Future<List<AudioTrack>> getPlaylistTracksForPlayback({
     required String playlistId,
-    int page = 1,
-    int pageSize = 12,
+    required String host,
+    required String token,
   }) async {
+    if (_isOfficialServer) {
+      // 官方服务器：走 getPlaylistWorks，逐个作品展开
+      try {
+        final response = await getPlaylistWorks(
+          playlistId: playlistId,
+          page: 1,
+          pageSize: 9999,
+        );
+        final works = (response['works'] as List?) ?? const [];
+        final result = <AudioTrack>[];
+        final seen = <String>{};
+        for (final w in works) {
+          if (w is! Map) continue;
+          final workId = (w['id'] as num?)?.toInt() ?? 0;
+          if (workId == 0) continue;
+          final tracks = await _fetchWorkTracks(workId, host, token);
+          for (final t in tracks) {
+            if (t.hash != null && seen.contains(t.hash)) continue;
+            if (t.hash != null) seen.add(t.hash!);
+            result.add(t);
+          }
+        }
+        return result;
+      } catch (e) {
+        throw KikoeruApiException(
+          'Failed to get playlist tracks for playback',
+          e,
+        );
+      }
+    }
+
+    // ---- 自建服务器分支 ----
     try {
-      final response = await _dio.get(
-        '/api/playlist/get-playlist-works',
-        queryParameters: {
-          'id': playlistId,
-          'page': page,
-          'pageSize': pageSize,
-        },
-      );
-      return response.data;
+      final detailResp = await _dio.get('/api/playlists/$playlistId');
+      final data = detailResp.data;
+      final items = (data is Map && data['items'] is List)
+          ? (data['items'] as List).whereType<Map>().toList()
+          : <Map>[];
+
+      if (items.isEmpty) return [];
+
+      final result = <AudioTrack>[];
+      final seenHashes = <String>{};
+
+      for (final item in items) {
+        final m = item.cast<String, dynamic>();
+        final workId = (m['workId'] as num?)?.toInt() ??
+            int.tryParse((m['hash'] as String? ?? '').split('/').first) ??
+            0;
+        if (workId == 0) continue;
+
+        final workTracks = await _fetchWorkTracks(workId, host, token);
+        for (final track in workTracks) {
+          if (track.hash != null && seenHashes.contains(track.hash)) continue;
+          if (track.hash != null) seenHashes.add(track.hash!);
+          result.add(track);
+        }
+      }
+
+      return result;
     } catch (e) {
-      throw KikoeruApiException('Failed to get playlist works', e);
+      throw KikoeruApiException(
+        'Failed to get playlist tracks for playback',
+        e,
+      );
     }
   }
 
+  /// 拉一个作品的所有音轨，转成 AudioTrack
+  ///
+  /// - /api/tracks/{workId} 拿音轨原始数据（有缓存）
+  /// - /api/work/{workId} 拿作品标题和封面（有缓存）
+  Future<List<AudioTrack>> _fetchWorkTracks(
+    int workId,
+    String host,
+    String token,
+  ) async {
+    try {
+      final tracksResp = await _dio.get('/api/tracks/$workId');
+      final tracks = tracksResp.data;
+      if (tracks is! List) return [];
+
+      final normalizedHost =
+          host.startsWith('http://') || host.startsWith('https://')
+              ? host
+              : 'https://$host';
+
+      // 拿作品标题（有缓存时命中缓存）
+      Map<String, dynamic>? workJson;
+      try {
+        workJson = await getWork(workId);
+      } catch (_) {}
+
+      final workTitle = workJson?['title'] as String? ?? 'RJ$workId';
+      final coverUrl = token.isNotEmpty
+          ? '$normalizedHost/api/cover/$workId?token=$token'
+          : '$normalizedHost/api/cover/$workId';
+
+      final result = <AudioTrack>[];
+      const audioExts = [
+        '.mp3',
+        '.wav',
+        '.flac',
+        '.m4a',
+        '.aac',
+        '.ogg',
+        '.opus',
+        '.wma',
+        '.m4b',
+      ];
+
+      for (final track in tracks) {
+        if (track is! Map) continue;
+
+        final title = track['title'] as String? ?? '';
+        if (title.isEmpty) continue;
+
+        // 过滤非音频文件：优先看 type，其次看扩展名
+        final type = track['type'] as String?;
+        final lower = title.toLowerCase();
+        final isAudio = type == 'audio' ||
+            audioExts.any((ext) => lower.endsWith(ext));
+        if (!isAudio) continue;
+
+        final hash = track['hash'] as String?;
+        if (hash == null || hash.isEmpty) continue;
+
+        final streamUrl = token.isNotEmpty
+            ? '$normalizedHost/api/media/stream/$hash?token=$token'
+            : '$normalizedHost/api/media/stream/$hash';
+
+        result.add(AudioTrack(
+          id: hash,
+          url: streamUrl,
+          title: title,
+          artist: null,
+          album: workTitle,
+          artworkUrl: coverUrl,
+          duration: _parseTrackDuration(track['duration']),
+          workId: workId,
+          hash: hash,
+        ));
+      }
+
+      return result;
+    } catch (e) {
+      _logOutput('[Playlist] 拉取作品 $workId 音轨失败: $e');
+      return [];
+    }
+  }
+
+  Duration? _parseTrackDuration(dynamic value) {
+    if (value is num) {
+      return Duration(milliseconds: (value * 1000).round());
+    }
+    return null;
+  }
   // Progress API
   Future<void> updateProgress(int workId, double progress) async {
     try {
